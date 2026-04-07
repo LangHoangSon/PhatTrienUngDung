@@ -1,9 +1,9 @@
 # Project - Food Ordering at Restaurant
 
 
-chạy backend:
+run backend:
 node server.js
 
-chạy frontend:
+run frontend:
 npm install
 npm run dev
