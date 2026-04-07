@@ -2,10 +2,13 @@
 const mysql = require('mysql2');
 
 const connection = mysql.createPool({
-  host: 'localhost',
+  host: '127.0.0.1',
   user: 'root',
-  password: '123456',
+  password: '', // XAMPP mặc định là rỗng
   database: 'restaurant_qr'
 });
 
 module.exports = connection;
+
+
+
