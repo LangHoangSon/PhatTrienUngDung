@@ -97,6 +97,7 @@ app.get('/test-db', (req, res) => {
 // });
 app.get('/api/generate-qrs', async (req, res) => {
 
+  const frontendHost = process.env.FRONTEND_HOST || 'localhost';
   const [tables] = await db.promise().query(
     "SELECT table_number FROM tables"
   );
@@ -109,7 +110,7 @@ app.get('/api/generate-qrs', async (req, res) => {
 
   for (const table of tables) {
 
-    const url = `http://10.34.37.6:3000/menu?table=${table.table_number}`;
+    const url = `http://${frontendHost}:3000/menu?table=${table.table_number}`;
 
     const filePath = path.join(folder, `table-${table.table_number}.png`);
 
