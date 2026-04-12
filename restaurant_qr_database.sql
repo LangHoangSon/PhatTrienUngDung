@@ -41,4 +41,11 @@ INSERT INTO menu_items (name, price) VALUES
 ('Cơm gà', 35000),
 ('Trà đào', 25000),
 ('Bún bò', 40000);
+SET SQL_SAFE_UPDATES = 0;
+
+UPDATE menu_items SET image_url = 'https://cdn.tgdd.vn/Files/2022/01/07/1409726/tong-hop-cong-thuc-lam-tra-dao-cuc-ngon-giai-nhiet-co-the-202201080743018481.jpg' WHERE name = 'Trà đào';
+UPDATE menu_items SET image_url = 'https://static.vinwonders.com/production/com-ga-hue-1.jpg' WHERE name = 'Cơm gà';
+UPDATE menu_items SET image_url = 'https://static.vinwonders.com/production/bun-bo-hue-cau-giay-1.jpg' WHERE name = 'Bún bò';
+UPDATE menu_items SET image_url = 'https://cafefcdn.com/2018/7/19/photo-2-1531984647242593960017.png' WHERE name = 'Phở';
+SET SQL_SAFE_UPDATES = 1;
 SELECT * FROM menu_items;
