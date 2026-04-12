@@ -24,6 +24,15 @@ export default function StaffPage() {
   const [loadingItems, setLoadingItems] = useState(false)
   const [submitting, setSubmitting] = useState(false)
 
+  const [menuItems, setMenuItems] = useState([])
+  const [menuLoading, setMenuLoading] = useState(true)
+  const [addOpen, setAddOpen] = useState(false)
+  const [newName, setNewName] = useState('')
+  const [newPrice, setNewPrice] = useState('')
+  const [newImageUrl, setNewImageUrl] = useState('')
+  const [newFile, setNewFile] = useState(null)
+  const [menuSaving, setMenuSaving] = useState(false)
+
   const ordersById = useMemo(() => new Map(orders.map(o => [o.id, o])), [orders])
   const selectedOrder = selectedOrderId ? ordersById.get(selectedOrderId) : null
 
@@ -33,6 +42,12 @@ export default function StaffPage() {
     const oJson = await oRes.json()
     setTables(Array.isArray(tJson) ? tJson : [])
     setOrders(Array.isArray(oJson) ? oJson : [])
+  }
+
+  const fetchMenu = async () => {
+    const res = await fetch('/api/menu')
+    const json = await res.json()
+    setMenuItems(Array.isArray(json) ? json : [])
   }
 
   useEffect(() => {
@@ -52,6 +67,26 @@ export default function StaffPage() {
     load()
     const timer = setInterval(load, 5000)
 
+    return () => {
+      cancelled = true
+      clearInterval(timer)
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        setMenuLoading(true)
+        await fetchMenu()
+      } catch (e) {
+        console.error('Menu load failed:', e)
+      } finally {
+        if (!cancelled) setMenuLoading(false)
+      }
+    }
+    load()
+    const timer = setInterval(load, 15000)
     return () => {
       cancelled = true
       clearInterval(timer)
@@ -118,6 +153,71 @@ export default function StaffPage() {
       console.error('Update status failed:', e)
     } finally {
       setSubmitting(false)
+    }
+  }
+
+  const dishAvailable = (m) => m.is_available === true || m.is_available === 1
+
+  const setMenuAvailability = async (id, is_available) => {
+    setMenuSaving(true)
+    try {
+      const res = await fetch(`/api/menu/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ is_available })
+      })
+      if (!res.ok) throw new Error('patch failed')
+      await fetchMenu()
+    } catch (e) {
+      console.error(e)
+      alert('Không cập nhật được trạng thái món.')
+    } finally {
+      setMenuSaving(false)
+    }
+  }
+
+  const submitNewDish = async () => {
+    const name = newName.trim()
+    const price = parseFloat(newPrice, 10)
+    if (!name || Number.isNaN(price) || price < 0) {
+      alert('Nhập tên món và giá hợp lệ.')
+      return
+    }
+    setMenuSaving(true)
+    try {
+      let res
+      if (newFile) {
+        const fd = new FormData()
+        fd.append('name', name)
+        fd.append('price', String(price))
+        fd.append('image', newFile)
+        res = await fetch('/api/menu', { method: 'POST', body: fd })
+      } else {
+        res = await fetch('/api/menu', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name,
+            price,
+            image_url: newImageUrl.trim() || undefined
+          })
+        })
+      }
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.message || 'create failed')
+      }
+      setAddOpen(false)
+      setNewName('')
+      setNewPrice('')
+      setNewImageUrl('')
+      setNewFile(null)
+      await fetchMenu()
+    } catch (e) {
+      console.error(e)
+      alert('Không thêm được món. Kiểm tra backend và thử lại.')
+    } finally {
+      setMenuSaving(false)
     }
   }
 
@@ -347,7 +447,207 @@ export default function StaffPage() {
             )}
           </section>
         </div>
+
+        <section style={{ marginTop: 28 }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 14 }}>
+            <h2 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 700, color: 'var(--text-primary)' }}>
+              Quản lý thực đơn
+            </h2>
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              disabled={menuSaving}
+              style={{
+                padding: '12px 18px',
+                borderRadius: 12,
+                border: 'none',
+                fontWeight: 800,
+                cursor: menuSaving ? 'not-allowed' : 'pointer',
+                background: 'linear-gradient(135deg, var(--amber), var(--amber-light))',
+                color: '#fff',
+                boxShadow: '0 6px 20px rgba(232,130,26,0.35)'
+              }}
+            >
+              + Thêm món mới
+            </button>
+          </div>
+
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13, marginBottom: 14, lineHeight: 1.5 }}>
+            Đánh dấu <strong>hết món</strong> để khách vẫn thấy món trên menu nhưng ảnh mờ và có chữ &quot;Hết món&quot;. Thêm món mới có thể kèm ảnh (tải file) hoặc dán URL ảnh.
+          </p>
+
+          {menuLoading ? (
+            <div style={{ padding: 20, borderRadius: 'var(--radius)', background: 'rgba(122,92,74,0.06)' }}>Đang tải thực đơn...</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
+              {menuItems.map((m) => (
+                <div
+                  key={m.id}
+                  style={{
+                    background: '#fff',
+                    borderRadius: 'var(--radius)',
+                    boxShadow: 'var(--shadow-card)',
+                    padding: 12,
+                    display: 'flex',
+                    gap: 12,
+                    alignItems: 'center',
+                    border: dishAvailable(m) ? '1px solid rgba(122,92,74,0.1)' : '2px solid rgba(232,130,26,0.35)'
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                      flexShrink: 0,
+                      background: 'var(--amber-pale)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 28
+                    }}
+                  >
+                    {m.image_url ? (
+                      <img src={m.image_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', filter: dishAvailable(m) ? 'none' : 'grayscale(1) brightness(0.75)' }} />
+                    ) : (
+                      <span>🍜</span>
+                    )}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ fontWeight: 900, fontSize: 14, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.name}</div>
+                    <div style={{ fontWeight: 800, fontSize: 13, color: 'var(--amber)', marginTop: 2 }}>{formatMoney(m.price)}</div>
+                    <div style={{ marginTop: 8 }}>
+                      {dishAvailable(m) ? (
+                        <button
+                          type="button"
+                          disabled={menuSaving}
+                          onClick={() => setMenuAvailability(m.id, false)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 10px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(232,130,26,0.45)',
+                            background: 'rgba(232,130,26,0.1)',
+                            color: 'var(--amber-dark)',
+                            fontWeight: 800,
+                            fontSize: 12,
+                            cursor: menuSaving ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Đánh dấu hết món
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={menuSaving}
+                          onClick={() => setMenuAvailability(m.id, true)}
+                          style={{
+                            width: '100%',
+                            padding: '8px 10px',
+                            borderRadius: 10,
+                            border: '1px solid rgba(61,43,31,0.2)',
+                            background: 'linear-gradient(135deg, #3D2B1F, #5C3D28)',
+                            color: '#FFFAF3',
+                            fontWeight: 800,
+                            fontSize: 12,
+                            cursor: menuSaving ? 'not-allowed' : 'pointer'
+                          }}
+                        >
+                          Mở bán lại
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </main>
+
+      {addOpen && (
+        <>
+          <div
+            onClick={() => !menuSaving && setAddOpen(false)}
+            style={{ position: 'fixed', inset: 0, background: 'rgba(45,25,10,0.55)', backdropFilter: 'blur(3px)', zIndex: 400 }}
+          />
+          <div
+            style={{
+              position: 'fixed',
+              top: '50%',
+              left: '50%',
+              transform: 'translate(-50%, -50%)',
+              zIndex: 401,
+              width: 'min(420px, 92vw)',
+              background: '#FFFAF3',
+              borderRadius: 20,
+              padding: 22,
+              boxShadow: '0 24px 64px rgba(61,43,31,0.25)'
+            }}
+          >
+            <h3 style={{ fontFamily: "'Playfair Display', serif", fontSize: 20, fontWeight: 700, marginBottom: 14 }}>Thêm món mới</h3>
+            <label style={{ display: 'block', fontWeight: 700, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Tên món</label>
+            <input
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+              placeholder="Ví dụ: Bún chả"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(122,92,74,0.25)', marginBottom: 12, fontSize: 14 }}
+            />
+            <label style={{ display: 'block', fontWeight: 700, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Giá (₫)</label>
+            <input
+              type="number"
+              min={0}
+              step={1000}
+              value={newPrice}
+              onChange={(e) => setNewPrice(e.target.value)}
+              placeholder="45000"
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(122,92,74,0.25)', marginBottom: 12, fontSize: 14 }}
+            />
+            <label style={{ display: 'block', fontWeight: 700, fontSize: 12, color: 'var(--text-secondary)', marginBottom: 4 }}>Ảnh món (tùy chọn)</label>
+            <input
+              type="file"
+              accept="image/*"
+              onChange={(e) => setNewFile(e.target.files?.[0] || null)}
+              style={{ width: '100%', marginBottom: 8, fontSize: 13 }}
+            />
+            <p style={{ fontSize: 12, color: 'var(--text-muted)', marginBottom: 8 }}>Hoặc dán URL ảnh (chỉ dùng khi không chọn file):</p>
+            <input
+              value={newImageUrl}
+              onChange={(e) => setNewImageUrl(e.target.value)}
+              placeholder="https://..."
+              disabled={!!newFile}
+              style={{ width: '100%', padding: '10px 12px', borderRadius: 10, border: '1px solid rgba(122,92,74,0.25)', marginBottom: 16, fontSize: 14, opacity: newFile ? 0.5 : 1 }}
+            />
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button
+                type="button"
+                onClick={() => !menuSaving && setAddOpen(false)}
+                style={{ flex: 1, padding: 12, borderRadius: 12, border: '1px solid rgba(122,92,74,0.25)', background: '#fff', fontWeight: 800, cursor: menuSaving ? 'not-allowed' : 'pointer' }}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                onClick={submitNewDish}
+                disabled={menuSaving}
+                style={{
+                  flex: 1,
+                  padding: 12,
+                  borderRadius: 12,
+                  border: 'none',
+                  background: menuSaving ? 'rgba(232,130,26,0.45)' : 'linear-gradient(135deg, var(--amber), var(--amber-light))',
+                  color: '#fff',
+                  fontWeight: 800,
+                  cursor: menuSaving ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {menuSaving ? 'Đang lưu...' : 'Xong'}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   )
 }

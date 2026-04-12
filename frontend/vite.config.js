@@ -7,7 +7,8 @@ export default defineConfig({
     port: 3000,
     host: '0.0.0.0',  // ← Thêm dòng này
     proxy: {
-      '/api': 'http://localhost:5000'
+      '/api': 'http://localhost:5000',
+      '/uploads': 'http://localhost:5000'
     }
   }
 })
