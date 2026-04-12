@@ -17,11 +17,20 @@ export default function MenuPage() {
   const [submitting, setSubmitting] = useState(false)
   const { cart, addItem, removeItem, clearCart, totalItems, totalPrice } = useCart()
 
-  useEffect(() => {
+  const loadMenu = () => {
     fetch('/api/menu')
       .then(r => r.json())
-      .then(data => { setMenuItems(data); setLoading(false) })
+      .then(data => {
+        setMenuItems(Array.isArray(data) ? data : [])
+        setLoading(false)
+      })
       .catch(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadMenu()
+    const t = setInterval(loadMenu, 10000)
+    return () => clearInterval(t)
   }, [])
 
   const handleOrder = async () => {
@@ -36,7 +45,14 @@ export default function MenuPage() {
           items: cart.map(c => ({ menu_id: c.id, quantity: c.quantity }))
         })
       })
-      if (res.ok) { clearCart(); setCartOpen(false); setShowSuccess(true) }
+      if (res.ok) {
+        clearCart()
+        setCartOpen(false)
+        setShowSuccess(true)
+      } else {
+        const err = await res.json().catch(() => ({}))
+        alert(err.message || 'Không thể đặt món. Có thể món đã hết — vui lòng kiểm tra lại giỏ.')
+      }
     } catch (e) { console.error(e) }
     finally { setSubmitting(false) }
   }

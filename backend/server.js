@@ -3,7 +3,21 @@ const fs = require('fs');
 const path = require('path');
 const express = require('express');
 const cors = require('cors');
+const multer = require('multer');
 const db = require('./db');
+
+const uploadsDir = path.join(__dirname, 'uploads');
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+const uploadStorage = multer.diskStorage({
+  destination: (req, file, cb) => cb(null, uploadsDir),
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname || '') || '.jpg';
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2, 10)}${ext}`);
+  }
+});
+const upload = multer({ storage: uploadStorage, limits: { fileSize: 3 * 1024 * 1024 } });
 db.getConnection((err, connection) => {
   if (err) {
     console.error("❌ Database connection failed:", err);
@@ -16,6 +30,7 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use('/uploads', express.static(uploadsDir));
 
 app.get('/', (req, res) => {
   res.send("API is running...");
@@ -106,28 +121,73 @@ app.get('/api/generate-qrs', async (req, res) => {
 
 });
 
-// API Menu
+// API Menu — trả về tất cả món (kể cả hết) để khách thấy overlay "Hết món"
 app.get('/api/menu', (req, res) => {
-
-  const sql = `
-    SELECT * 
-    FROM menu_items
-    WHERE is_available = TRUE
-  `;
-
+  const sql = `SELECT * FROM menu_items ORDER BY id ASC`;
   db.query(sql, (err, result) => {
-
     if (err) {
       console.error(err);
-      return res.status(500).json({
-        message: "Database error"
-      });
+      return res.status(500).json({ message: "Database error" });
     }
-
     res.json(result);
-
   });
+});
 
+// Thêm món: JSON { name, price, image_url? } hoặc multipart (name, price, file field "image")
+app.post('/api/menu', upload.single('image'), async (req, res) => {
+  try {
+    const name = (req.body.name || '').trim();
+    const price = parseFloat(req.body.price, 10);
+    let image_url = req.body.image_url != null && String(req.body.image_url).trim() !== ''
+      ? String(req.body.image_url).trim()
+      : null;
+    if (req.file) {
+      image_url = `/uploads/${req.file.filename}`;
+    }
+    if (!name) {
+      return res.status(400).json({ message: "name is required" });
+    }
+    if (Number.isNaN(price) || price < 0) {
+      return res.status(400).json({ message: "invalid price" });
+    }
+    const [ins] = await db.promise().query(
+      `INSERT INTO menu_items (name, price, image_url, is_available) VALUES (?, ?, ?, TRUE)`,
+      [name, price, image_url]
+    );
+    res.json({
+      id: ins.insertId,
+      name,
+      price,
+      image_url,
+      is_available: 1
+    });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Create menu item failed" });
+  }
+});
+
+// Cập nhật còn món / hết món
+app.patch('/api/menu/:id', async (req, res) => {
+  const id = req.params.id;
+  const { is_available } = req.body;
+  if (is_available === undefined) {
+    return res.status(400).json({ message: "is_available is required" });
+  }
+  const val = is_available === true || is_available === 1 || is_available === '1' ? 1 : 0;
+  try {
+    const [r] = await db.promise().query(
+      `UPDATE menu_items SET is_available = ? WHERE id = ?`,
+      [val, id]
+    );
+    if (r.affectedRows === 0) {
+      return res.status(404).json({ message: "Menu item not found" });
+    }
+    res.json({ message: "Menu availability updated", id: Number(id), is_available: val === 1 });
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ message: "Update failed" });
+  }
 });
 
 // API Create Order
@@ -142,29 +202,41 @@ app.post('/api/orders', async (req, res) => {
   }
 
   try {
+    const priceByMenuId = new Map();
 
-    // 1️⃣ tạo order
+    for (const item of items) {
+      const [rows] = await db.promise().query(
+        `SELECT price, is_available FROM menu_items WHERE id = ?`,
+        [item.menu_id]
+      );
+      if (!rows.length) {
+        return res.status(400).json({
+          message: "Invalid menu item",
+          menu_id: item.menu_id
+        });
+      }
+      const row = rows[0];
+      const available = row.is_available === true || row.is_available === 1;
+      if (!available) {
+        return res.status(400).json({
+          message: "Món đã hết hoặc không phục vụ",
+          menu_id: item.menu_id
+        });
+      }
+      priceByMenuId.set(item.menu_id, Number(row.price));
+    }
+
     const [orderResult] = await db.promise().query(
       `INSERT INTO orders (table_id, total_price) VALUES (?, 0)`,
       [table_id]
     );
 
     const orderId = orderResult.insertId;
-
     let totalPrice = 0;
 
-    // 2️⃣ xử lý từng món
     for (const item of items) {
-
-      const [priceResult] = await db.promise().query(
-        `SELECT price FROM menu_items WHERE id = ?`,
-        [item.menu_id]
-      );
-
-      const price = priceResult[0].price;
-
+      const price = priceByMenuId.get(item.menu_id);
       const itemTotal = price * item.quantity;
-
       totalPrice += itemTotal;
 
       await db.promise().query(
@@ -173,10 +245,8 @@ app.post('/api/orders', async (req, res) => {
         VALUES (?, ?, ?, ?)`,
         [orderId, item.menu_id, item.quantity, price]
       );
-
     }
 
-    // 3️⃣ update tổng tiền
     await db.promise().query(
       `UPDATE orders SET total_price = ? WHERE id = ?`,
       [totalPrice, orderId]
@@ -187,15 +257,9 @@ app.post('/api/orders', async (req, res) => {
       order_id: orderId,
       total_price: totalPrice
     });
-
   } catch (error) {
-
     console.error(error);
-
-    res.status(500).json({
-      message: "Create order failed"
-    });
-
+    res.status(500).json({ message: "Create order failed" });
   }
 });
 //API Get Orders
