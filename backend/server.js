@@ -193,41 +193,19 @@ app.patch('/api/menu/:id', async (req, res) => {
 
 // API Create Order
 app.post('/api/orders', async (req, res) => {
-
   const { table_id, items } = req.body;
 
   if (!table_id || !items || items.length === 0) {
-    return res.status(400).json({
-      message: "Invalid order data"
-    });
+    return res.status(400).json({ message: "Invalid data" });
   }
 
+  const conn = await db.promise().getConnection();
+
   try {
-    const priceByMenuId = new Map();
+    await conn.beginTransaction();
 
-    for (const item of items) {
-      const [rows] = await db.promise().query(
-        `SELECT price, is_available FROM menu_items WHERE id = ?`,
-        [item.menu_id]
-      );
-      if (!rows.length) {
-        return res.status(400).json({
-          message: "Invalid menu item",
-          menu_id: item.menu_id
-        });
-      }
-      const row = rows[0];
-      const available = row.is_available === true || row.is_available === 1;
-      if (!available) {
-        return res.status(400).json({
-          message: "Món đã hết hoặc không phục vụ",
-          menu_id: item.menu_id
-        });
-      }
-      priceByMenuId.set(item.menu_id, Number(row.price));
-    }
-
-    const [orderResult] = await db.promise().query(
+    // 1. tạo order
+    const [orderResult] = await conn.query(
       `INSERT INTO orders (table_id, total_price) VALUES (?, 0)`,
       [table_id]
     );
@@ -235,34 +213,125 @@ app.post('/api/orders', async (req, res) => {
     const orderId = orderResult.insertId;
     let totalPrice = 0;
 
+    // 2. xử lý items
     for (const item of items) {
-      const price = priceByMenuId.get(item.menu_id);
-      const itemTotal = price * item.quantity;
-      totalPrice += itemTotal;
+      const [menu] = await conn.query(
+        `SELECT price FROM menu_items WHERE id = ?`,
+        [item.menu_id]
+      );
 
-      await db.promise().query(
-        `INSERT INTO order_items
-        (order_id, menu_item_id, quantity, unit_price)
-        VALUES (?, ?, ?, ?)`,
-        [orderId, item.menu_id, item.quantity, price]
+      const price = menu[0].price;
+      totalPrice += price * item.quantity;
+
+      await conn.query(
+        `INSERT INTO order_items 
+        (order_id, menu_item_id, quantity, unit_price, note, options)
+        VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          orderId,
+          item.menu_id,
+          item.quantity,
+          price,
+          item.note || null,
+          JSON.stringify(item.options || [])
+        ]
       );
     }
 
-    await db.promise().query(
+    // 3. update total
+    await conn.query(
       `UPDATE orders SET total_price = ? WHERE id = ?`,
       [totalPrice, orderId]
     );
 
+    await conn.commit();
+
     res.json({
-      message: "Order created successfully",
+      message: "Order created",
       order_id: orderId,
-      total_price: totalPrice
+      total: totalPrice
     });
-  } catch (error) {
-    console.error(error);
+
+  } catch (err) {
+    await conn.rollback();
+    console.error(err);
     res.status(500).json({ message: "Create order failed" });
+  } finally {
+    conn.release();
   }
 });
+
+// app.post('/api/orders', async (req, res) => {
+
+//   const { table_id, items } = req.body;
+
+//   if (!table_id || !items || items.length === 0) {
+//     return res.status(400).json({
+//       message: "Invalid order data"
+//     });
+//   }
+
+//   try {
+//     const priceByMenuId = new Map();
+
+//     for (const item of items) {
+//       const [rows] = await db.promise().query(
+//         `SELECT price, is_available FROM menu_items WHERE id = ?`,
+//         [item.menu_id]
+//       );
+//       if (!rows.length) {
+//         return res.status(400).json({
+//           message: "Invalid menu item",
+//           menu_id: item.menu_id
+//         });
+//       }
+//       const row = rows[0];
+//       const available = row.is_available === true || row.is_available === 1;
+//       if (!available) {
+//         return res.status(400).json({
+//           message: "Món đã hết hoặc không phục vụ",
+//           menu_id: item.menu_id
+//         });
+//       }
+//       priceByMenuId.set(item.menu_id, Number(row.price));
+//     }
+
+//     const [orderResult] = await db.promise().query(
+//       `INSERT INTO orders (table_id, total_price) VALUES (?, 0)`,
+//       [table_id]
+//     );
+
+//     const orderId = orderResult.insertId;
+//     let totalPrice = 0;
+
+//     for (const item of items) {
+//       const price = priceByMenuId.get(item.menu_id);
+//       const itemTotal = price * item.quantity;
+//       totalPrice += itemTotal;
+
+//       await db.promise().query(
+//         `INSERT INTO order_items
+//         (order_id, menu_item_id, quantity, unit_price)
+//         VALUES (?, ?, ?, ?)`,
+//         [orderId, item.menu_id, item.quantity, price]
+//       );
+//     }
+
+//     await db.promise().query(
+//       `UPDATE orders SET total_price = ? WHERE id = ?`,
+//       [totalPrice, orderId]
+//     );
+
+//     res.json({
+//       message: "Order created successfully",
+//       order_id: orderId,
+//       total_price: totalPrice
+//     });
+//   } catch (error) {
+//     console.error(error);
+//     res.status(500).json({ message: "Create order failed" });
+//   }
+// });
 //API Get Orders
 app.get('/api/orders', async (req, res) => {
 
@@ -390,4 +459,121 @@ app.get('/api/tables', async (req, res) => {
 
 app.listen(5000, () => {
   console.log("🚀 Server running on port 5000");
+});
+
+app.get('/api/revenue', async (req, res) => {
+  const { type } = req.query;
+
+  let groupBy = "";
+  let format = "";
+
+  if (type === 'day') {
+    format = "%Y-%m-%d";
+  } else if (type === 'month') {
+    format = "%Y-%m";
+  } else if (type === 'year') {
+    format = "%Y";
+  } else {
+    return res.status(400).json({ message: "Invalid type" });
+  }
+
+  try {
+    const [rows] = await db.promise().query(`
+      SELECT 
+        DATE_FORMAT(created_at, '${format}') AS period,
+        SUM(total_price) AS revenue
+      FROM orders
+      WHERE status = 'completed'
+      GROUP BY period
+      ORDER BY period DESC
+    `);
+
+    res.json(rows);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Revenue error" });
+  }
+});
+
+app.post('/api/call-staff', async (req, res) => {
+  const { table_id } = req.body;
+
+  if (!table_id) {
+    return res.status(400).json({ message: "Missing table_id" });
+  }
+
+  try {
+    await db.promise().query(
+      `INSERT INTO staff_calls (table_id) VALUES (?)`,
+      [table_id]
+    );
+
+    res.json({ message: "Staff called" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Call failed" });
+  }
+});
+
+
+app.post('/api/payment/:orderId', async (req, res) => {
+  const { orderId } = req.params;
+
+  try {
+    const [orders] = await db.promise().query(
+      `SELECT total_price FROM orders WHERE id = ?`,
+      [orderId]
+    );
+
+    if (orders.length === 0) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const amount = orders[0].total_price;
+
+    // tạo payment record
+    const [payment] = await db.promise().query(
+      `INSERT INTO payments (order_id, amount) VALUES (?, ?)`,
+      [orderId, amount]
+    );
+
+    // tạo QR content (fake payment link)
+    const qrData = `PAYMENT|ORDER:${orderId}|AMOUNT:${amount}`;
+
+    const folder = path.join(__dirname, 'qrcodes');
+    if (!fs.existsSync(folder)) fs.mkdirSync(folder);
+
+    const filePath = path.join(folder, `payment-${orderId}.png`);
+
+    await QRCode.toFile(filePath, qrData);
+
+    res.json({
+      message: "QR generated",
+      payment_id: payment.insertId,
+      qr: `/qrcodes/payment-${orderId}.png`
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Payment failed" });
+  }
+});
+
+app.put('/api/payment/:id', async (req, res) => {
+  const { id } = req.params;
+  const { status } = req.body;
+
+  try {
+    await db.promise().query(
+      `UPDATE payments SET status = ? WHERE id = ?`,
+      [status, id]
+    );
+
+    res.json({ message: "Payment updated" });
+
+  } catch (err) {
+    res.status(500).json({ message: "Update failed" });
+  }
 });
