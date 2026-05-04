@@ -49,3 +49,24 @@ UPDATE menu_items SET image_url = 'https://static.vinwonders.com/production/bun-
 UPDATE menu_items SET image_url = 'https://cafefcdn.com/2018/7/19/photo-2-1531984647242593960017.png' WHERE name = 'Phở';
 SET SQL_SAFE_UPDATES = 1;
 SELECT * FROM menu_items;
+
+ALTER TABLE order_items
+ADD COLUMN note TEXT,
+ADD COLUMN options JSON;
+
+
+CREATE TABLE staff_calls (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  table_id INT,
+  status VARCHAR(50) DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+
+CREATE TABLE payments (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  order_id INT,
+  amount DECIMAL(10,2),
+  status VARCHAR(50) DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
