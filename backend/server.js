@@ -363,7 +363,7 @@ app.get('/api/orders', async (req, res) => {
   }
 
 });
-  
+
 
 // API Get Order Items
 app.get('/api/orders/:id/items', async (req, res) => {
@@ -376,7 +376,8 @@ app.get('/api/orders/:id/items', async (req, res) => {
       SELECT 
         menu_items.name,
         order_items.quantity,
-        order_items.unit_price
+        order_items.unit_price,
+        order_items.note
       FROM order_items
       JOIN menu_items
       ON order_items.menu_item_id = menu_items.id
@@ -514,6 +515,98 @@ app.post('/api/call-staff', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ message: "Call failed" });
+  }
+});
+
+
+// Get pending staff calls
+app.get('/api/staff-calls', async (req, res) => {
+  try {
+    const [calls] = await db.promise().query(`
+      SELECT staff_calls.*, tables.table_number 
+      FROM staff_calls 
+      JOIN tables ON staff_calls.table_id = tables.id 
+      WHERE staff_calls.status = 'pending'
+      ORDER BY staff_calls.created_at ASC
+    `);
+    res.json(calls);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to get calls" });
+  }
+});
+
+// Resolve a staff call
+app.patch('/api/staff-calls/:id', async (req, res) => {
+  try {
+    await db.promise().query(
+      `UPDATE staff_calls SET status = 'resolved' WHERE id = ?`,
+      [req.params.id]
+    );
+    res.json({ message: "Call resolved" });
+  } catch (err) {
+    res.status(500).json({ message: "Failed to update call" });
+  }
+});
+
+// Get chat messages for a specific table
+app.get('/api/chat/:table_id', async (req, res) => {
+  try {
+    const [messages] = await db.promise().query(
+      `SELECT * FROM chat_messages WHERE table_id = ? ORDER BY created_at ASC`,
+      [req.params.table_id]
+    );
+    res.json(messages);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to load chat" });
+  }
+});
+
+// Get all chat messages (for staff overview)
+app.get('/api/chat', async (req, res) => {
+  try {
+    const [messages] = await db.promise().query(
+      `SELECT chat_messages.*, tables.table_number 
+       FROM chat_messages 
+       JOIN tables ON chat_messages.table_id = tables.id 
+       ORDER BY created_at ASC`
+    );
+    res.json(messages);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to load all chats" });
+  }
+});
+
+// Send a chat message
+app.post('/api/chat', async (req, res) => {
+  const { table_id, sender, message } = req.body;
+  if (!table_id || !sender || !message) {
+    return res.status(400).json({ message: "Missing fields" });
+  }
+  try {
+    const [result] = await db.promise().query(
+      `INSERT INTO chat_messages (table_id, sender, message) VALUES (?, ?, ?)`,
+      [table_id, sender, message]
+    );
+
+    // Auto-resolve "call staff" if staff replies
+    if (sender === 'staff') {
+      await db.promise().query(
+        `UPDATE staff_calls SET status = 'resolved' WHERE table_id = ? AND status = 'pending'`,
+        [table_id]
+      );
+    }
+
+    const [newMessage] = await db.promise().query(
+      `SELECT * FROM chat_messages WHERE id = ?`,
+      [result.insertId]
+    );
+    res.json(newMessage[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Failed to send message" });
   }
 });
 
