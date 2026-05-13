@@ -1,4 +1,4 @@
-export default function CartDrawer({ cart, totalPrice, onAdd, onRemove, onClose, onOrder, submitting }) {
+export default function CartDrawer({ cart, totalPrice, onAdd, onRemove, onUpdateNote, onClose, onOrder, submitting }) {
   return (
     <>
       <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(45,25,10,0.55)', backdropFilter: 'blur(3px)', zIndex: 200, animation: 'fadeIn 0.25s ease' }} />
@@ -17,6 +17,13 @@ export default function CartDrawer({ cart, totalPrice, onAdd, onRemove, onClose,
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontWeight: 600, fontSize: 15, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{item.name}</p>
                 <p style={{ color: 'var(--amber)', fontWeight: 700, fontSize: 14 }}>{(item.price * item.quantity).toLocaleString('vi-VN')}₫</p>
+                <input 
+                  type="text" 
+                  value={item.note || ''} 
+                  onChange={(e) => onUpdateNote(item.id, e.target.value)} 
+                  placeholder="Ghi chú (vd: ít cay, không hành...)" 
+                  style={{ marginTop: 8, width: '100%', padding: '6px 10px', borderRadius: 8, border: '1px solid rgba(122,92,74,0.2)', fontSize: 13, outline: 'none' }}
+                />
               </div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--amber-pale)', borderRadius: 10, padding: '4px 8px' }}>
                 <button onClick={() => onRemove(item.id)} style={smallBtn}>−</button>

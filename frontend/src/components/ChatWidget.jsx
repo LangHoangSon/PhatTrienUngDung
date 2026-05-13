@@ -19,12 +19,36 @@ export default function ChatWidget({ tableId }) {
     }
   };
 
+  const [unreadCount, setUnreadCount] = useState(0);
+  const [notificationSound] = useState(() => new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3'));
+  const prevMessagesLen = useRef(0);
+
   useEffect(() => {
-    if (!isOpen) return;
     fetchMessages();
     const interval = setInterval(fetchMessages, 3000);
     return () => clearInterval(interval);
-  }, [isOpen, tableId]);
+  }, [tableId]);
+
+  useEffect(() => {
+    if (messages.length > prevMessagesLen.current) {
+      const newMessages = messages.slice(prevMessagesLen.current);
+      const newStaffMessages = newMessages.filter(m => m.sender === 'staff');
+      
+      if (newStaffMessages.length > 0) {
+        if (!isOpen) {
+          setUnreadCount(prev => prev + newStaffMessages.length);
+        }
+        notificationSound.play().catch(e => console.log('Audio autoplay blocked:', e));
+      }
+    }
+    prevMessagesLen.current = messages.length;
+  }, [messages, isOpen, notificationSound]);
+
+  useEffect(() => {
+    if (isOpen) {
+      setUnreadCount(0);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -93,10 +117,15 @@ export default function ChatWidget({ tableId }) {
           display: isOpen ? 'none' : 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          animation: 'bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
+          animation: unreadCount > 0 ? 'pulse 2s infinite' : 'bounceIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
         }}
       >
         💬
+        {unreadCount > 0 && (
+          <span style={{ position: 'absolute', top: -5, right: -5, background: 'red', color: 'white', borderRadius: '50%', width: 20, height: 20, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 'bold' }}>
+            {unreadCount}
+          </span>
+        )}
       </button>
 
       {isOpen && (

@@ -1,4 +1,4 @@
-﻿create database restaurant_qr
+create database restaurant_qr
 
 use restaurant_qr
 
@@ -39,7 +39,24 @@ CREATE TABLE order_items (
     CONSTRAINT FK_Items_Menu FOREIGN KEY (menu_item_id) REFERENCES menu_items(id)
 );
 
--- 6. Chèn dữ liệu mẫu
+-- 6. Bảng lưu trữ yêu cầu gọi nhân viên
+CREATE TABLE staff_calls (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  table_id INT,
+  status NVARCHAR(50) DEFAULT 'pending',
+  created_at DATETIME DEFAULT GETDATE()
+);
+
+-- 7. Bảng lưu trữ tin nhắn giữa khách và nhân viên
+CREATE TABLE chat_messages (
+  id INT IDENTITY(1,1) PRIMARY KEY,
+  table_id INT,
+  sender NVARCHAR(50),
+  message NVARCHAR(MAX),
+  created_at DATETIME DEFAULT GETDATE()
+);
+
+-- 8. Chèn dữ liệu mẫu
 INSERT INTO [tables] (table_number) VALUES (1), (2), (3);
 
 INSERT INTO menu_items (name, price, category, is_available)

@@ -22,12 +22,22 @@ async function main() {
     CREATE TABLE IF NOT EXISTS chat_messages (
       id INT AUTO_INCREMENT PRIMARY KEY,
       table_id INT,
-      sender ENUM('customer', 'staff'),
+      sender VARCHAR(50),
       message TEXT,
-      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-      is_read BOOLEAN DEFAULT FALSE
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
+  console.log('Created chat_messages table');
+
+  await connection.query(`
+    CREATE TABLE IF NOT EXISTS staff_calls (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      table_id INT,
+      status VARCHAR(50) DEFAULT 'pending',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+  `);
+  console.log('Created staff_calls table');
   console.log('Created chat_messages table');
 
   await connection.end();

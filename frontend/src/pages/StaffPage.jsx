@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import StaffChatWidget from '../components/StaffChatWidget.jsx'
 
 const STATUS_SEQUENCE = ['pending', 'preparing', 'done', 'paid']
 const STATUS_LABEL = {
@@ -394,6 +395,11 @@ export default function StaffPage() {
                               <div style={{ color: 'var(--text-secondary)', fontWeight: 700, fontSize: 12 }}>
                                 Đơn giá: {formatMoney(it.unit_price)}
                               </div>
+                              {it.note && (
+                                <div style={{ color: 'var(--amber-dark)', fontWeight: 700, fontSize: 12, marginTop: 4, fontStyle: 'italic' }}>
+                                  📝 Ghi chú: {it.note}
+                                </div>
+                              )}
                             </div>
                             <div style={{ textAlign: 'right', fontWeight: 900 }}>
                               <div style={{ color: 'var(--amber-dark)' }}>x{it.quantity}</div>
@@ -648,6 +654,8 @@ export default function StaffPage() {
           </div>
         </>
       )}
+
+      <StaffChatWidget />
     </div>
   )
 }

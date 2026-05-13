@@ -411,6 +411,16 @@ app.patch('/api/orders/:id/status', async (req, res) => {
       [status, orderId]
     );
 
+    // If order is paid, reset chat history and staff calls for the table
+    if (status === 'paid') {
+      const [orders] = await db.promise().query(`SELECT table_id FROM orders WHERE id = ?`, [orderId]);
+      if (orders.length > 0) {
+        const tableId = orders[0].table_id;
+        await db.promise().query(`DELETE FROM chat_messages WHERE table_id = ?`, [tableId]);
+        await db.promise().query(`DELETE FROM staff_calls WHERE table_id = ?`, [tableId]);
+      }
+    }
+
     res.json({
       message: "Order status updated"
     });

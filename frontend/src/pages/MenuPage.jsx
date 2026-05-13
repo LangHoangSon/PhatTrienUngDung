@@ -7,6 +7,8 @@ import CartDrawer from '../components/CartDrawer.jsx'
 import CartBar from '../components/CartBar.jsx'
 import SuccessModal from '../components/SuccessModal.jsx'
 
+import ChatWidget from '../components/ChatWidget.jsx'
+
 export default function MenuPage() {
   const [searchParams] = useSearchParams()
   const tableId = searchParams.get('table') || '1'
@@ -15,7 +17,7 @@ export default function MenuPage() {
   const [cartOpen, setCartOpen] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const { cart, addItem, removeItem, clearCart, totalItems, totalPrice } = useCart()
+  const { cart, addItem, removeItem, updateItemNote, clearCart, totalItems, totalPrice } = useCart()
 
   const loadMenu = () => {
     fetch('/api/menu')
@@ -42,7 +44,7 @@ export default function MenuPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           table_id: parseInt(tableId),
-          items: cart.map(c => ({ menu_id: c.id, quantity: c.quantity }))
+          items: cart.map(c => ({ menu_id: c.id, quantity: c.quantity, note: c.note }))
         })
       })
       if (res.ok) {
@@ -64,8 +66,9 @@ export default function MenuPage() {
         {loading ? <LoadingSpinner /> : <MenuGrid items={menuItems} cart={cart} onAdd={addItem} onRemove={removeItem} />}
       </main>
       {totalItems > 0 && <CartBar totalItems={totalItems} totalPrice={totalPrice} onClick={() => setCartOpen(true)} />}
-      {cartOpen && <CartDrawer cart={cart} totalPrice={totalPrice} onAdd={addItem} onRemove={removeItem} onClose={() => setCartOpen(false)} onOrder={handleOrder} submitting={submitting} />}
+      {cartOpen && <CartDrawer cart={cart} totalPrice={totalPrice} onAdd={addItem} onRemove={removeItem} onUpdateNote={updateItemNote} onClose={() => setCartOpen(false)} onOrder={handleOrder} submitting={submitting} />}
       {showSuccess && <SuccessModal onClose={() => setShowSuccess(false)} tableId={tableId} />}
+      <ChatWidget tableId={tableId} />
     </div>
   )
 }

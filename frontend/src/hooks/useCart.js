@@ -19,9 +19,13 @@ export default function useCart() {
     })
   }, [])
 
+  const updateItemNote = useCallback((id, note) => {
+    setCart(prev => prev.map(c => c.id === id ? { ...c, note } : c))
+  }, [])
+
   const clearCart = useCallback(() => setCart([]), [])
   const totalItems = cart.reduce((s, c) => s + c.quantity, 0)
   const totalPrice = cart.reduce((s, c) => s + c.price * c.quantity, 0)
 
-  return { cart, addItem, removeItem, clearCart, totalItems, totalPrice }
+  return { cart, addItem, removeItem, updateItemNote, clearCart, totalItems, totalPrice }
 }
